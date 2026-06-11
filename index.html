@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sinuca - Ranking</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; }
+
+  .header { background: #16213e; padding: 20px 24px; border-bottom: 2px solid #0f3460; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .header h1 { font-size: 22px; font-weight: 700; color: #e94560; }
+  .header span { font-size: 13px; color: #888; }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #555; margin-right: 6px; transition: background 0.3s; }
+  .status-dot.online { background: #00c853; }
+
+  .nav { display: flex; gap: 0; background: #16213e; border-bottom: 1px solid #0f3460; overflow-x: auto; }
+  .nav button { padding: 12px 22px; background: none; border: none; color: #888; font-size: 14px; font-weight: 500; cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; transition: all 0.2s; }
+  .nav button.active { color: #e94560; border-bottom-color: #e94560; }
+  .nav button:hover:not(.active) { color: #e0e0e0; background: rgba(255,255,255,0.05); }
+
+  .page { display: none; padding: 24px; max-width: 900px; margin: 0 auto; }
+  .page.active { display: block; }
+
+  .card { background: #16213e; border: 1px solid #0f3460; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+  .card h2 { font-size: 16px; font-weight: 600; color: #e94560; margin-bottom: 16px; }
+
+  .ranking-table { width: 100%; border-collapse: collapse; }
+  .ranking-table th { text-align: left; font-size: 12px; color: #666; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 12px; border-bottom: 1px solid #0f3460; }
+  .ranking-table td { padding: 12px; border-bottom: 1px solid rgba(15,52,96,0.5); font-size: 14px; }
+  .ranking-table tr:last-child td { border-bottom: none; }
+  .ranking-table tr:hover td { background: rgba(233,69,96,0.05); }
+
+  .pos-badge { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
+  .pos-1 { background: #FFD700; color: #1a1a2e; }
+  .pos-2 { background: #C0C0C0; color: #1a1a2e; }
+  .pos-3 { background: #CD7F32; color: #fff; }
+  .pos-n { background: #0f3460; color: #888; }
+
+  .player-name { font-weight: 600; font-size: 15px; color: #e0e0e0; }
+  .points-total { font-size: 22px; font-weight: 700; color: #e94560; }
+  .stat-small { font-size: 13px; color: #888; }
+  .wins-bar { height: 6px; background: #0f3460; border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  .wins-bar-fill { height: 100%; background: linear-gradient(90deg, #e94560, #f5a742); border-radius: 3px; }
+
+  .entry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+  @media (max-width: 600px) { .entry-grid { grid-template-columns: 1fr; } }
+
+  .player-entry { background: #1a1a2e; border: 1px solid #0f3460; border-radius: 8px; padding: 14px; display: flex; align-items: center; gap: 12px; transition: border-color 0.2s; }
+  .player-entry:hover { border-color: #e94560; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: #0f3460; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: #e94560; flex-shrink: 0; }
+  .wins-input { width: 70px; padding: 8px; background: #0f3460; border: 1px solid #1a4a80; border-radius: 6px; color: #e0e0e0; font-size: 16px; font-weight: 600; text-align: center; }
+  .wins-input:focus { outline: none; border-color: #e94560; }
+
+  .preview-section { background: #1a1a2e; border: 1px solid #0f3460; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .preview-section h3 { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .preview-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(15,52,96,0.5); font-size: 14px; }
+  .preview-row:last-child { border-bottom: none; }
+  .preview-pos { font-weight: 700; color: #888; width: 30px; }
+  .preview-name { flex: 1; }
+  .preview-wins { color: #888; font-size: 13px; width: 70px; text-align: right; }
+  .preview-pts { font-weight: 700; width: 55px; text-align: right; }
+  .pts-3 { color: #FFD700; }
+  .pts-2 { color: #C0C0C0; }
+  .pts-1 { color: #CD7F32; }
+  .pts-0 { color: #555; }
+
+  .date-row { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .date-row label { font-size: 14px; color: #888; }
+  .date-input { padding: 8px 12px; background: #0f3460; border: 1px solid #1a4a80; border-radius: 6px; color: #e0e0e0; font-size: 14px; }
+  .date-input:focus { outline: none; border-color: #e94560; }
+
+  .btn-primary { padding: 12px 28px; background: #e94560; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .btn-primary:hover { background: #c73652; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-save { padding: 12px 28px; background: #0f8060; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .btn-save:hover { background: #0a6050; }
+  .btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-danger { padding: 6px 12px; background: rgba(233,69,96,0.15); color: #e94560; border: 1px solid rgba(233,69,96,0.3); border-radius: 6px; font-size: 12px; cursor: pointer; }
+  .btn-danger:hover { background: rgba(233,69,96,0.25); }
+
+  .player-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .player-tag { padding: 6px 12px; border: 1px solid #0f3460; border-radius: 20px; font-size: 13px; cursor: pointer; background: #1a1a2e; transition: all 0.2s; user-select: none; }
+  .player-tag.active { background: #e94560; border-color: #e94560; color: #fff; }
+
+  .session-card { background: #1a1a2e; border: 1px solid #0f3460; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+  .session-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .session-date { font-weight: 600; font-size: 15px; }
+  .session-row { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 4px 0; }
+  .session-pos { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .session-name { flex: 1; }
+  .session-wins { color: #666; font-size: 12px; min-width: 60px; text-align: right; }
+  .session-pts { font-weight: 700; font-size: 13px; min-width: 50px; text-align: right; }
+
+  .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  @media (max-width: 500px) { .summary-row { grid-template-columns: repeat(2, 1fr); } }
+  .summary-card { background: #16213e; border: 1px solid #0f3460; border-radius: 8px; padding: 14px; text-align: center; }
+  .summary-card .val { font-size: 22px; font-weight: 700; color: #e94560; }
+  .summary-card .lbl { font-size: 12px; color: #666; margin-top: 4px; }
+
+  .alert { padding: 12px 16px; border-radius: 8px; font-size: 14px; margin-bottom: 16px; }
+  .alert-error { background: rgba(233,69,96,0.15); border: 1px solid rgba(233,69,96,0.3); color: #e94560; }
+  .alert-success { background: rgba(0,200,83,0.15); border: 1px solid rgba(0,200,83,0.3); color: #00c853; }
+
+  .loading { text-align: center; padding: 40px; color: #555; font-size: 14px; }
+  .spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid #0f3460; border-top-color: #e94560; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>🎱 Sinuca - Ranking</h1>
+    <span>Acompanhamento de partidas diárias</span>
+  </div>
+  <div style="font-size:13px;color:#888">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status-text">Conectando...</span>
+  </div>
+</div>
+
+<div class="nav">
+  <button class="active" onclick="showPage('ranking',this)">🏆 Ranking</button>
+  <button onclick="showPage('lancar',this)">➕ Lançar Dia</button>
+  <button onclick="showPage('historico',this)">📅 Histórico</button>
+</div>
+
+<div id="page-ranking" class="page active">
+  <div id="ranking-loading" class="loading"><div class="spinner"></div><br>Carregando...</div>
+  <div id="ranking-content" style="display:none">
+    <div class="summary-row" id="summary-cards"></div>
+    <div class="card">
+      <h2>🏆 Ranking Geral</h2>
+      <table class="ranking-table">
+        <thead>
+          <tr>
+            <th style="width:44px">#</th>
+            <th>Jogador</th>
+            <th>Pontos</th>
+            <th>Vitórias</th>
+            <th>Dias jogados</th>
+            <th>Média/dia</th>
+          </tr>
+        </thead>
+        <tbody id="ranking-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="page-lancar" class="page">
+  <div class="card">
+    <h2>➕ Lançar Resultados do Dia</h2>
+    <div class="date-row">
+      <label>Data:</label>
+      <input type="date" class="date-input" id="entry-date">
+    </div>
+    <div id="entry-alert"></div>
+    <div class="player-toggle" id="active-players-toggle"></div>
+    <div class="entry-grid" id="entry-grid"></div>
+    <div id="preview-area" style="display:none">
+      <div class="preview-section">
+        <h3>Prévia dos pontos</h3>
+        <div id="preview-rows"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <button class="btn-primary" onclick="calcPreview()">Calcular Prévia</button>
+      <button class="btn-save" id="btn-salvar" onclick="saveDay()">Salvar no Firebase</button>
+    </div>
+  </div>
+</div>
+
+<div id="page-historico" class="page">
+  <div class="card">
+    <h2>📅 Histórico de Sessões</h2>
+    <div id="history-list"><div class="loading"><div class="spinner"></div><br>Carregando...</div></div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDTLAGhsORWn-xikslsL1E_itLDy0J-TXs",
+  authDomain: "sinuca-amigos.firebaseapp.com",
+  databaseURL: "https://sinuca-amigos-default-rtdb.firebaseio.com",
+  projectId: "sinuca-amigos",
+  storageBucket: "sinuca-amigos.firebasestorage.app",
+  messagingSenderId: "755176849216",
+  appId: "1:755176849216:web:175c1802fb37853b30c4a5"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const sessionsRef = db.ref('sessions');
+
+const PLAYERS = ['Gustavo', 'Joas', 'Marcos', 'Felipe', 'Vinicius', 'Marcio Thiago', 'Rafael'];
+
+const INITIAL_SESSIONS = [
+  { date: '2026-06-06', results: [{player:'Gustavo',wins:17},{player:'Joas',wins:15},{player:'Marcos',wins:14},{player:'Felipe',wins:7},{player:'Vinicius',wins:4},{player:'Marcio Thiago',wins:2}] },
+  { date: '2026-06-08', results: [{player:'Gustavo',wins:14},{player:'Vinicius',wins:12},{player:'Marcio Thiago',wins:11},{player:'Joas',wins:9},{player:'Marcos',wins:8}] },
+  { date: '2026-06-09', results: [{player:'Joas',wins:14},{player:'Vinicius',wins:12},{player:'Marcos',wins:11},{player:'Gustavo',wins:10},{player:'Marcio Thiago',wins:9}] },
+  { date: '2026-06-10', results: [{player:'Gustavo',wins:14},{player:'Joas',wins:11},{player:'Vinicius',wins:8},{player:'Marcio Thiago',wins:8},{player:'Marcos',wins:6}] },
+  { date: '2026-06-11', results: [{player:'Marcio Thiago',wins:16},{player:'Marcos',wins:11},{player:'Gustavo',wins:11},{player:'Joas',wins:9},{player:'Vinicius',wins:7}] }
+];
+
+let allSessions = [];
+let activePlayers = new Set(PLAYERS);
+let currentPage = 'ranking';
+
+function calcPoints(results) {
+  const sorted = [...results].sort((a,b) => b.wins - a.wins);
+  const ranked = [];
+  let pos = 1, i = 0;
+  while (i < sorted.length) {
+    let j = i;
+    while (j < sorted.length && sorted[j].wins === sorted[i].wins) j++;
+    const groupPos = pos;
+    for (let k = i; k < j; k++) {
+      let pts = 0;
+      if (sorted[k].wins > 0) {
+        if (groupPos === 1) pts = 3;
+        else if (groupPos <= 3) pts = 2;
+        else pts = 1;
+      }
+      ranked.push({player: sorted[k].player, wins: sorted[k].wins, pos: groupPos, points: pts});
+    }
+    pos = j + 1;
+    i = j;
+  }
+  return ranked;
+}
+
+function setStatus(online) {
+  document.getElementById('status-dot').className = 'status-dot' + (online ? ' online' : '');
+  document.getElementById('status-text').textContent = online ? 'Online' : 'Sem conexão';
+}
+
+db.ref('.info/connected').on('value', snap => setStatus(snap.val() === true));
+
+function initDB(snapshot) {
+  if (!snapshot.exists()) {
+    const data = {};
+    INITIAL_SESSIONS.forEach(s => {
+      const key = s.date.replace(/-/g,'');
+      data[key] = { date: s.date, results: calcPoints(s.results) };
+    });
+    sessionsRef.set(data);
+  }
+}
+
+sessionsRef.on('value', snapshot => {
+  initDB(snapshot);
+  const data = snapshot.val() || {};
+  allSessions = Object.values(data).sort((a,b) => a.date.localeCompare(b.date));
+
+  document.getElementById('ranking-loading').style.display = 'none';
+  document.getElementById('ranking-content').style.display = 'block';
+
+  if (currentPage === 'ranking') renderRanking();
+  if (currentPage === 'historico') renderHistory();
+});
+
+function getRanking() {
+  const totals = {};
+  PLAYERS.forEach(p => { totals[p] = {player:p, points:0, wins:0, days:0}; });
+  allSessions.forEach(s => {
+    (s.results || []).forEach(r => {
+      if (!totals[r.player]) totals[r.player] = {player:r.player, points:0, wins:0, days:0};
+      totals[r.player].points += r.points;
+      totals[r.player].wins += r.wins;
+      if (r.wins > 0) totals[r.player].days++;
+    });
+  });
+  return Object.values(totals).sort((a,b) => b.points - a.points || b.wins - a.wins);
+}
+
+function initials(name) {
+  return name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+}
+
+function posBadge(pos) {
+  const cls = pos===1?'pos-1':pos===2?'pos-2':pos===3?'pos-3':'pos-n';
+  const label = pos===1?'🥇':pos===2?'🥈':pos===3?'🥉':pos;
+  return `<div class="pos-badge ${cls}">${label}</div>`;
+}
+
+function ptsClass(pts) {
+  return pts===3?'pts-3':pts===2?'pts-2':pts===1?'pts-1':'pts-0';
+}
+
+function renderRanking() {
+  const ranking = getRanking();
+  const maxWins = Math.max(...ranking.map(r=>r.wins), 1);
+
+  document.getElementById('summary-cards').innerHTML = `
+    <div class="summary-card"><div class="val">${allSessions.length}</div><div class="lbl">Sessões</div></div>
+    <div class="summary-card"><div class="val">${ranking.reduce((s,r)=>s+r.wins,0)}</div><div class="lbl">Vitórias totais</div></div>
+    <div class="summary-card"><div class="val">${ranking[0].player.split(' ')[0]}</div><div class="lbl">Líder</div></div>
+    <div class="summary-card"><div class="val">${ranking[0].points}</div><div class="lbl">Pontos do líder</div></div>
+  `;
+
+  const tbody = document.getElementById('ranking-body');
+  tbody.innerHTML = ranking.map((r, idx) => {
+    const pos = idx + 1;
+    const pct = Math.round((r.wins / maxWins) * 100);
+    return `<tr>
+      <td>${posBadge(pos)}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="avatar">${initials(r.player)}</div>
+          <span class="player-name">${r.player}</span>
+        </div>
+      </td>
+      <td><span class="points-total">${r.points}</span></td>
+      <td>
+        <div style="font-size:13px">${r.wins}</div>
+        <div class="wins-bar"><div class="wins-bar-fill" style="width:${pct}%"></div></div>
+      </td>
+      <td class="stat-small">${r.days} dias</td>
+      <td class="stat-small">${r.days > 0 ? (r.wins / r.days).toFixed(1) : '—'}/dia</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderEntryForm() {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth()+1).padStart(2,'0');
+  const dd = String(today.getDate()).padStart(2,'0');
+  document.getElementById('entry-date').value = `${yyyy}-${mm}-${dd}`;
+
+  const toggle = document.getElementById('active-players-toggle');
+  toggle.innerHTML = '<span style="font-size:13px;color:#666;margin-right:4px">Quem jogou hoje?</span>'
+    + PLAYERS.map(p => `<span class="player-tag ${activePlayers.has(p)?'active':''}" onclick="togglePlayer('${p}')">${p}</span>`).join('');
+
+  document.getElementById('entry-grid').innerHTML = PLAYERS.filter(p => activePlayers.has(p)).map(p => `
+    <div class="player-entry">
+      <div class="avatar">${initials(p)}</div>
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:14px">${p}</div>
+        <div style="font-size:12px;color:#666;margin-bottom:6px">Vitórias hoje</div>
+        <input type="number" class="wins-input" id="wins_${p.replace(/ /g,'_')}" min="0" value="" placeholder="0" oninput="clearPreview()">
+      </div>
+    </div>`).join('');
+}
+
+function togglePlayer(name) {
+  if (activePlayers.has(name)) activePlayers.delete(name);
+  else activePlayers.add(name);
+  renderEntryForm();
+  clearPreview();
+}
+
+function clearPreview() {
+  document.getElementById('preview-area').style.display = 'none';
+}
+
+function getEntryValues() {
+  return [...activePlayers].map(p => ({
+    player: p,
+    wins: parseInt(document.getElementById('wins_'+p.replace(/ /g,'_'))?.value) || 0
+  }));
+}
+
+function calcPreview() {
+  const results = getEntryValues();
+  if (!results.some(r => r.wins > 0)) { showAlert('Informe pelo menos uma vitória.', 'error'); return; }
+  clearAlert();
+  const ranked = calcPoints(results);
+  document.getElementById('preview-rows').innerHTML = ranked.map(r => `
+    <div class="preview-row">
+      <span class="preview-pos">${r.pos}°</span>
+      <span class="preview-name">${r.player}</span>
+      <span class="preview-wins">${r.wins} vitórias</span>
+      <span class="preview-pts ${ptsClass(r.points)}">${r.points > 0 ? '+'+r.points+' pts' : '—'}</span>
+    </div>`).join('');
+  document.getElementById('preview-area').style.display = 'block';
+}
+
+function saveDay() {
+  const date = document.getElementById('entry-date').value;
+  if (!date) { showAlert('Selecione uma data.', 'error'); return; }
+  const results = getEntryValues();
+  if (!results.some(r => r.wins > 0)) { showAlert('Informe pelo menos uma vitória.', 'error'); return; }
+
+  const existing = allSessions.find(s => s.date === date);
+  if (existing && !confirm(`Já existe uma sessão para ${formatDate(date)}. Deseja substituir?`)) return;
+
+  const btn = document.getElementById('btn-salvar');
+  btn.disabled = true;
+  btn.textContent = 'Salvando...';
+
+  const key = date.replace(/-/g, '');
+  sessionsRef.child(key).set({ date, results: calcPoints(results) })
+    .then(() => {
+      showAlert(`Sessão de ${formatDate(date)} salva com sucesso!`, 'success');
+      clearPreview();
+      [...activePlayers].forEach(p => {
+        const el = document.getElementById('wins_'+p.replace(/ /g,'_'));
+        if (el) el.value = '';
+      });
+    })
+    .catch(err => showAlert('Erro ao salvar: ' + err.message, 'error'))
+    .finally(() => { btn.disabled = false; btn.textContent = 'Salvar no Firebase'; });
+}
+
+function renderHistory() {
+  const container = document.getElementById('history-list');
+  if (!allSessions.length) {
+    container.innerHTML = '<div class="loading" style="color:#555">Nenhuma sessão registrada ainda.</div>';
+    return;
+  }
+  container.innerHTML = [...allSessions].reverse().map(s => `
+    <div class="session-card">
+      <div class="session-header">
+        <span class="session-date">📅 ${formatDate(s.date)}</span>
+        <button class="btn-danger" onclick="deleteSession('${s.date}')">Excluir</button>
+      </div>
+      <div>${(s.results||[]).map(r => {
+        const bc = r.pos===1?'pos-1':r.pos===2?'pos-2':r.pos===3?'pos-3':'pos-n';
+        const lbl = r.pos===1?'🥇':r.pos===2?'🥈':r.pos===3?'🥉':r.pos+'°';
+        return `<div class="session-row">
+          <div class="session-pos ${bc}">${lbl}</div>
+          <span class="session-name">${r.player}</span>
+          <span class="session-wins">${r.wins} vitórias</span>
+          <span class="session-pts ${ptsClass(r.points)}">${r.points>0?'+'+r.points:'—'} pts</span>
+        </div>`;
+      }).join('')}</div>
+    </div>`).join('');
+}
+
+function deleteSession(date) {
+  if (!confirm(`Excluir sessão de ${formatDate(date)}?`)) return;
+  const key = date.replace(/-/g, '');
+  sessionsRef.child(key).remove()
+    .catch(err => alert('Erro ao excluir: ' + err.message));
+}
+
+function formatDate(d) {
+  const [y,m,day] = d.split('-');
+  return `${day}/${m}/${y}`;
+}
+
+function showAlert(msg, type) {
+  document.getElementById('entry-alert').innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+  setTimeout(clearAlert, 4000);
+}
+
+function clearAlert() {
+  document.getElementById('entry-alert').innerHTML = '';
+}
+
+function showPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  if (btn) btn.classList.add('active');
+  currentPage = name;
+  if (name === 'ranking') renderRanking();
+  if (name === 'lancar') renderEntryForm();
+  if (name === 'historico') renderHistory();
+}
+</script>
+</body>
+</html>
