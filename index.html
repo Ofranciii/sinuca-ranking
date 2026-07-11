@@ -173,6 +173,7 @@
             <th>Pontos</th>
             <th>Vitórias</th>
             <th>Dias</th>
+            <th>Média/dia</th>
           </tr>
         </thead>
         <tbody id="ranking-body"></tbody>
@@ -224,8 +225,18 @@
     </div>
     <div style="display:flex;gap:12px;flex-wrap:wrap">
       <button class="btn-primary" onclick="calcPreview()">Calcular Prévia</button>
-      <button class="btn-save" id="btn-salvar" onclick="saveDay()">Salvar no Firebase</button>
+      <button class="btn-save" id="btn-salvar" onclick="saveDay()">Salvar</button>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>👥 Gerenciar Jogadores</h2>
+    <div id="players-list" style="margin-bottom:16px"></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="new-player-input" class="date-input" placeholder="Nome do novo jogador" style="flex:1;min-width:160px">
+      <button class="btn-save" onclick="addPlayer()" style="padding:8px 20px;font-size:14px">+ Adicionar</button>
+    </div>
+    <div id="players-alert" style="margin-top:12px"></div>
   </div>
 </div>
 
@@ -240,7 +251,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" onerror="onFirebaseScriptError()"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" onerror="onFirebaseScriptError()"></script>
 <script>
-let db = null, sessionsRef = null, usingFirebase = false;
+let db = null, sessionsRef = null, playersRef = null, usingFirebase = false;
 
 function onFirebaseScriptError() {
   console.warn('Firebase CDN falhou, usando localStorage');
@@ -261,6 +272,7 @@ function initFirebase() {
     });
     db = firebase.database();
     sessionsRef = db.ref('sessions');
+    playersRef = db.ref('players');
     usingFirebase = true;
 
     db.ref('.info/connected').on('value', snap => {
@@ -277,6 +289,13 @@ function initFirebase() {
         initLocalMode();
       }
     }, 20000);
+
+    playersRef.once('value', snap => {
+      if (snap.exists()) PLAYERS = snap.val();
+    });
+    playersRef.on('value', snap => {
+      if (snap.exists()) { PLAYERS = snap.val(); if (currentPage === 'lancar') renderEntryForm(); }
+    });
 
     sessionsRef.on('value', snapshot => {
       clearTimeout(timeout);
@@ -312,6 +331,8 @@ function initLocalMode() {
     document.getElementById('status-dot').className = 'status-dot';
     document.getElementById('status-text').textContent = 'Modo local (offline)';
   }
+  const storedPlayers = localStorage.getItem('sinuca_players_v1');
+  if (storedPlayers) PLAYERS = JSON.parse(storedPlayers);
   const stored = localStorage.getItem('sinuca_sessions_v3');
   if (stored) {
     allSessions = JSON.parse(stored);
@@ -324,9 +345,66 @@ function initLocalMode() {
 
 function saveToLocal() {
   localStorage.setItem('sinuca_sessions_v3', JSON.stringify(allSessions));
+  localStorage.setItem('sinuca_players_v1', JSON.stringify(PLAYERS));
 }
 
-const PLAYERS = ['Gustavo', 'Joas', 'Marcos', 'Felipe', 'Vinicius', 'Marcio Thiago', 'Rafael'];
+function savePlayers() {
+  if (usingFirebase && playersRef) {
+    playersRef.set(PLAYERS).catch(err => console.error('Erro ao salvar jogadores:', err));
+  } else {
+    localStorage.setItem('sinuca_players_v1', JSON.stringify(PLAYERS));
+  }
+}
+
+function renderPlayersList() {
+  const el = document.getElementById('players-list');
+  if (!el) return;
+  el.innerHTML = PLAYERS.map((p, i) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1a1a2e;border:1px solid #0f3460;border-radius:8px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="avatar">${initials(p)}</div>
+        <span style="font-weight:600;font-size:14px">${p}</span>
+      </div>
+      <button class="btn-danger" onclick="removePlayer(${i})">Remover</button>
+    </div>`).join('');
+}
+
+function addPlayer() {
+  const input = document.getElementById('new-player-input');
+  const name = input.value.trim();
+  if (!name) { showPlayersAlert('Digite um nome válido.', 'error'); return; }
+  if (PLAYERS.map(p=>p.toLowerCase()).includes(name.toLowerCase())) {
+    showPlayersAlert('Esse jogador já existe.', 'error'); return;
+  }
+  PLAYERS.push(name);
+  savePlayers();
+  input.value = '';
+  activePlayers.add(name);
+  renderPlayersList();
+  renderEntryForm();
+  showPlayersAlert(`${name} adicionado com sucesso!`, 'success');
+}
+
+function removePlayer(idx) {
+  const name = PLAYERS[idx];
+  if (!confirm(`Remover "${name}" da lista de jogadores?`)) return;
+  PLAYERS.splice(idx, 1);
+  activePlayers.delete(name);
+  savePlayers();
+  renderPlayersList();
+  renderEntryForm();
+  showPlayersAlert(`${name} removido.`, 'success');
+}
+
+function showPlayersAlert(msg, type) {
+  const el = document.getElementById('players-alert');
+  if (!el) return;
+  el.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+  setTimeout(() => { if (el) el.innerHTML = ''; }, 3500);
+}
+
+const DEFAULT_PLAYERS = ['Gustavo', 'Joas', 'Marcos', 'Felipe', 'Vinicius', 'Marcio Thiago', 'Rafael'];
+let PLAYERS = [...DEFAULT_PLAYERS];
 const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
 const INITIAL_SESSIONS = [
@@ -470,6 +548,7 @@ function renderMonthRanking() {
         <div class="wins-bar"><div class="wins-bar-fill" style="width:${pct}%"></div></div>
       </td>
       <td style="font-size:13px;color:#888">${r.days} dias</td>
+      <td style="font-size:13px;color:#e94560;font-weight:600">${r.days > 0 ? (r.wins/r.days).toFixed(1) : '—'}</td>
     </tr>`;
   }).join('');
 }
@@ -708,7 +787,7 @@ function showPage(name, btn) {
   currentPage = name;
   if (name === 'ranking') renderMonthRanking();
   if (name === 'geral') renderGeral();
-  if (name === 'lancar') renderEntryForm();
+  if (name === 'lancar') { renderEntryForm(); renderPlayersList(); }
   if (name === 'historico') renderHistory();
 }
 
