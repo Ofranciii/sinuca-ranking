@@ -269,28 +269,37 @@ function initFirebase() {
       document.getElementById('status-text').textContent = on ? 'Online (Firebase)' : 'Sem conexão';
     });
 
+    let dataReceived = false;
     const timeout = setTimeout(() => {
-      console.warn('Firebase timeout, usando localStorage');
-      usingFirebase = false;
-      initLocalMode();
-    }, 8000);
+      if (!dataReceived) {
+        console.warn('Firebase timeout, usando localStorage');
+        usingFirebase = false;
+        initLocalMode();
+      }
+    }, 20000);
 
-    sessionsRef.once('value', snapshot => {
+    sessionsRef.on('value', snapshot => {
       clearTimeout(timeout);
+      dataReceived = true;
       if (!snapshot.exists()) {
         const data = {};
         INITIAL_SESSIONS.forEach(s => {
           data[s.date.replace(/-/g,'')] = {date: s.date, results: calcPoints(s.results)};
         });
-        sessionsRef.set(data).catch(() => initLocalMode());
+        sessionsRef.set(data).catch(err => {
+          console.error('Erro ao inicializar Firebase:', err);
+          initLocalMode();
+        });
+        return;
       }
-    }).catch(() => { clearTimeout(timeout); initLocalMode(); });
-
-    sessionsRef.on('value', snapshot => {
-      if (!snapshot.exists()) return;
       allSessions = Object.values(snapshot.val()).sort((a,b) => a.date.localeCompare(b.date));
       onDataReady();
-    }, () => { usingFirebase = false; initLocalMode(); });
+    }, err => {
+      clearTimeout(timeout);
+      console.error('Firebase error:', err);
+      usingFirebase = false;
+      initLocalMode();
+    });
 
   } catch(e) {
     console.error('Erro Firebase:', e);
