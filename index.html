@@ -237,20 +237,85 @@
   </div>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" onerror="onFirebaseScriptError()"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" onerror="onFirebaseScriptError()"></script>
 <script>
-firebase.initializeApp({
-  apiKey: "AIzaSyDTLAGhsORWn-xikslsL1E_itLDy0J-TXs",
-  authDomain: "sinuca-amigos.firebaseapp.com",
-  databaseURL: "https://sinuca-amigos-default-rtdb.firebaseio.com",
-  projectId: "sinuca-amigos",
-  storageBucket: "sinuca-amigos.firebasestorage.app",
-  messagingSenderId: "755176849216",
-  appId: "1:755176849216:web:175c1802fb37853b30c4a5"
-});
-const db = firebase.database();
-const sessionsRef = db.ref('sessions');
+let db = null, sessionsRef = null, usingFirebase = false;
+
+function onFirebaseScriptError() {
+  console.warn('Firebase CDN falhou, usando localStorage');
+  initLocalMode();
+}
+
+function initFirebase() {
+  try {
+    if (typeof firebase === 'undefined') { initLocalMode(); return; }
+    firebase.initializeApp({
+      apiKey: "AIzaSyDTLAGhsORWn-xikslsL1E_itLDy0J-TXs",
+      authDomain: "sinuca-amigos.firebaseapp.com",
+      databaseURL: "https://sinuca-amigos-default-rtdb.firebaseio.com",
+      projectId: "sinuca-amigos",
+      storageBucket: "sinuca-amigos.firebasestorage.app",
+      messagingSenderId: "755176849216",
+      appId: "1:755176849216:web:175c1802fb37853b30c4a5"
+    });
+    db = firebase.database();
+    sessionsRef = db.ref('sessions');
+    usingFirebase = true;
+
+    db.ref('.info/connected').on('value', snap => {
+      const on = snap.val() === true;
+      document.getElementById('status-dot').className = 'status-dot' + (on ? ' online' : '');
+      document.getElementById('status-text').textContent = on ? 'Online (Firebase)' : 'Sem conexão';
+    });
+
+    const timeout = setTimeout(() => {
+      console.warn('Firebase timeout, usando localStorage');
+      usingFirebase = false;
+      initLocalMode();
+    }, 8000);
+
+    sessionsRef.once('value', snapshot => {
+      clearTimeout(timeout);
+      if (!snapshot.exists()) {
+        const data = {};
+        INITIAL_SESSIONS.forEach(s => {
+          data[s.date.replace(/-/g,'')] = {date: s.date, results: calcPoints(s.results)};
+        });
+        sessionsRef.set(data).catch(() => initLocalMode());
+      }
+    }).catch(() => { clearTimeout(timeout); initLocalMode(); });
+
+    sessionsRef.on('value', snapshot => {
+      if (!snapshot.exists()) return;
+      allSessions = Object.values(snapshot.val()).sort((a,b) => a.date.localeCompare(b.date));
+      onDataReady();
+    }, () => { usingFirebase = false; initLocalMode(); });
+
+  } catch(e) {
+    console.error('Erro Firebase:', e);
+    initLocalMode();
+  }
+}
+
+function initLocalMode() {
+  if (document.getElementById('status-text')) {
+    document.getElementById('status-dot').className = 'status-dot';
+    document.getElementById('status-text').textContent = 'Modo local (offline)';
+  }
+  const stored = localStorage.getItem('sinuca_sessions_v3');
+  if (stored) {
+    allSessions = JSON.parse(stored);
+  } else {
+    allSessions = INITIAL_SESSIONS.map(s => ({date: s.date, results: calcPoints(s.results)}));
+    localStorage.setItem('sinuca_sessions_v3', JSON.stringify(allSessions));
+  }
+  onDataReady();
+}
+
+function saveToLocal() {
+  localStorage.setItem('sinuca_sessions_v3', JSON.stringify(allSessions));
+}
 
 const PLAYERS = ['Gustavo', 'Joas', 'Marcos', 'Felipe', 'Vinicius', 'Marcio Thiago', 'Rafael'];
 const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -320,39 +385,6 @@ function getRankingForSessions(sessions) {
   });
   return Object.values(totals).sort((a,b) => b.points - a.points || b.wins - a.wins);
 }
-
-db.ref('.info/connected').on('value', snap => {
-  const on = snap.val() === true;
-  document.getElementById('status-dot').className = 'status-dot' + (on ? ' online' : '');
-  document.getElementById('status-text').textContent = on ? 'Online' : 'Sem conexão';
-});
-
-sessionsRef.on('value', snapshot => {
-  if (!snapshot.exists()) {
-    const data = {};
-    INITIAL_SESSIONS.forEach(s => {
-      data[s.date.replace(/-/g,'')] = {date: s.date, results: calcPoints(s.results)};
-    });
-    sessionsRef.set(data);
-    return;
-  }
-  allSessions = Object.values(snapshot.val()).sort((a,b) => a.date.localeCompare(b.date));
-
-  // Default selected month = current month or latest available
-  const now = new Date();
-  const curKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-  const months = getMonths();
-  if (!selectedMonth || !months.includes(selectedMonth)) {
-    selectedMonth = months.includes(curKey) ? curKey : months[months.length - 1];
-  }
-
-  document.getElementById('ranking-loading').style.display = 'none';
-  document.getElementById('ranking-content').style.display = 'block';
-
-  if (currentPage === 'ranking') renderMonthRanking();
-  if (currentPage === 'geral') renderGeral();
-  if (currentPage === 'historico') renderHistory();
-});
 
 function initials(name) {
   return name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
@@ -588,25 +620,50 @@ function saveDay() {
   if (existing && !confirm(`Já existe uma sessão para ${formatDate(date)}. Deseja substituir?`)) return;
 
   const btn = document.getElementById('btn-salvar');
-  btn.disabled = true; btn.textContent = 'Salvando...';
+  btn.disabled = true;
+  btn.textContent = 'Salvando...';
 
-  sessionsRef.child(date.replace(/-/g,'')).set({date, results: calcPoints(results)})
-    .then(() => {
-      showAlert(`Sessão de ${formatDate(date)} salva!`, 'success');
-      clearPreview();
-      [...activePlayers].forEach(p => {
-        const el = document.getElementById('wins_'+p.replace(/ /g,'_'));
-        if (el) el.value = '';
-      });
-    })
-    .catch(err => showAlert('Erro: ' + err.message, 'error'))
-    .finally(() => { btn.disabled = false; btn.textContent = 'Salvar no Firebase'; });
+  const newSession = {date, results: calcPoints(results)};
+  const onSuccess = () => {
+    showAlert(`Sessão de ${formatDate(date)} salva!`, 'success');
+    clearPreview();
+    [...activePlayers].forEach(p => {
+      const el = document.getElementById('wins_'+p.replace(/ /g,'_'));
+      if (el) el.value = '';
+    });
+    btn.disabled = false;
+    btn.textContent = 'Salvar';
+  };
+  const onError = err => {
+    showAlert('Erro ao salvar: ' + (err?.message || err), 'error');
+    btn.disabled = false;
+    btn.textContent = 'Salvar';
+  };
+
+  if (usingFirebase && sessionsRef) {
+    sessionsRef.child(date.replace(/-/g,'')).set(newSession).then(onSuccess).catch(onError);
+  } else {
+    const idx = allSessions.findIndex(s => s.date === date);
+    if (idx >= 0) allSessions.splice(idx, 1);
+    allSessions.push(newSession);
+    allSessions.sort((a,b) => a.date.localeCompare(b.date));
+    saveToLocal();
+    onDataReady();
+    onSuccess();
+  }
 }
 
 function deleteSession(date) {
   if (!confirm(`Excluir sessão de ${formatDate(date)}?`)) return;
-  sessionsRef.child(date.replace(/-/g,'')).remove()
-    .catch(err => alert('Erro: ' + err.message));
+  if (usingFirebase && sessionsRef) {
+    sessionsRef.child(date.replace(/-/g,'')).remove()
+      .catch(err => alert('Erro: ' + err.message));
+  } else {
+    allSessions = allSessions.filter(s => s.date !== date);
+    saveToLocal();
+    onDataReady();
+    renderHistory();
+  }
 }
 
 function formatDate(d) {
@@ -620,6 +677,20 @@ function showAlert(msg, type) {
 }
 function clearAlert() { document.getElementById('entry-alert').innerHTML = ''; }
 
+function onDataReady() {
+  const now = new Date();
+  const curKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  const months = getMonths();
+  if (!selectedMonth || !months.includes(selectedMonth)) {
+    selectedMonth = months.includes(curKey) ? curKey : months[months.length - 1];
+  }
+  document.getElementById('ranking-loading').style.display = 'none';
+  document.getElementById('ranking-content').style.display = 'block';
+  if (currentPage === 'ranking') renderMonthRanking();
+  if (currentPage === 'geral') renderGeral();
+  if (currentPage === 'historico') renderHistory();
+}
+
 function showPage(name, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
@@ -631,6 +702,8 @@ function showPage(name, btn) {
   if (name === 'lancar') renderEntryForm();
   if (name === 'historico') renderHistory();
 }
+
+window.addEventListener('load', initFirebase);
 </script>
 </body>
 </html>
